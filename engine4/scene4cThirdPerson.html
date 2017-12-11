@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+
+<!-- HTML HEAD ELEMENT - DEFINES CSS FOR THE PAGE -->
+<head>
+	<meta charset="utf-8">
+    <style>
+	    body { background-color: #002200; }
+	    h3,p { color: #FFFF00; }
+	    canvas { background-color: #000044; }
+	    #debugContainer { color: #FFFFFF; position: absolute; z-index: 100;}
+    </style>
+    <title>Game Engine Scene Test</title>
+</head>
+
+<!-- ==================================================================== -->
+
+<!-- HTML BODY TAG - DEFINES THE HTML LAYOUT FOR THE PAGE -->
+<body oncontextmenu="return false;">
+
+<!-- INCLUDE SCRIPTS -->
+<script src="../threejs/build/three.js"></script>
+<script src="../threejs/examples/js/loaders/OBJLoader.js"></script>
+<script src="gameEngine4.js"></script>
+
+<!-- GAME SPECIFIC INCLUDES -->
+<script src="scene4cThirdPerson.js"></script>
+
+<!-- DEFINE LEFT DIV TAG - FOR DEBUG PRINTOUTS -->
+<div id="debugContainer">
+<pre id="debug"></pre>
+</div>
+
+<!-- MAKE CANVAS AND OTHER STARTING ELEMENTS  -->
+<center>
+	<br/>
+	<canvas id="gameCanvas" width="800" height="600"></canvas><br/>
+</center>
+
+
+<script>
+//----------------------------------------------------------------------//
+// THE MAIN CODE FOR THE GAME
+//----------------------------------------------------------------------//
+
+window.onload = function()
+{
+	// Initialize the engine
+	engine.DEBUG = false;
+	var canvas = document.getElementById("gameCanvas");
+	initEngine(canvas);
+
+	// Parse level0 (into a Three.js scene) and star the game loop
+	parseScene(level0); // upfront loaded Javscript object
+	//loadScene("scene0a.json"); // asynchronous loading of JSON
+	startGameLoop();
+}
+
+//----------------------------------------------------------------------//
+// SCRIPTS
+//----------------------------------------------------------------------//
+
+var fnum = 0;
+
+function rotateScript(sceneNode)
+{
+    // Constants
+    fnum++;
+    var rotationSpeed = sceneNode.userData["rotationSpeed"];
+    var frameRate = 60.0;
+    var rs = Math.cos(fnum*0.002);
+    sceneNode.rotateOnAxis(constants.YAXIS, rs*rotationSpeed/frameRate);
+}
+
+function bounceScript(sceneNode)
+{
+    // Constants
+    var bounceBottom = sceneNode.userData["bounceBottom"];
+    var bounceHeight = sceneNode.userData["bounceHeight"];
+
+    var y = Math.cos(fnum*0.025);
+    y = Math.pow(Math.abs(y), 0.8) * bounceHeight;
+    sceneNode.position.y = y + bounceBottom;
+}
+
+var switchCamera = function(cname)
+{
+	debug("switch camera: " + cname);
+	var camera = gameState.scene.getObjectByName(cname);
+	if (camera !== undefined) {
+		gameState.camera = camera;
+	}
+}
+
+var rotateAroundWorldAxis = function(object, axis, radians) 
+{
+	// axis must be normalized, angle in radians
+	// Also, assuming that the parents of object have no rotation
+
+    var q = new THREE.Quaternion(); 
+    q.setFromAxisAngle( axis, radians ); 
+    object.quaternion.premultiply( q );
+}
+
+var getForwardDirection = function(object)
+{
+	return new THREE.Vector3(0, 0, -1).applyQuaternion(object.quaternion);
+}
+
+var getRightDirection = function(object)
+{
+	return new THREE.Vector3(1, 0, 0).applyQuaternion(object.quaternion);
+}
+
+var thirdPersonScript = function(guy)
+{
+	var camera = gameState.camera;
+	
+	/*
+	// Follow behind in Z
+	camera.position.x = guy.position.x;
+	camera.position.y = guy.position.y + 2.0;
+	camera.position.z = guy.position.z + 4.0;
+	*/
+
+	// Look over player's shoulder
+	rotateAroundWorldAxis(camera, constants.YAXIS, 3.1415926);
+
+	camera.quaternion.copy(guy.quaternion);
+	rotateAroundWorldAxis(camera, constants.YAXIS, 3.1415926);
+
+	var f = getForwardDirection(camera);
+	camera.position.x = guy.position.x - f.x * 4.0;
+	camera.position.y = guy.position.y + 3.0;
+	camera.position.z = guy.position.z - f.z * 4.0;
+
+	var right = getRightDirection(camera);
+	rotateAroundWorldAxis(camera, right, -0.25);
+}
+
+var moveGuyScript = function(guy)
+{
+	debug("move guy script");
+
+	var speed = guy.userData["speed"] || 0.03;
+	var rspeed = guy.userData["rspeed"] || 0.05;
+
+	var pressedKeys = engine.pressedKeys;
+	if (pressedKeys[87] !== undefined) {
+		var fwd = getForwardDirection(guy);
+		guy.position.x -= fwd.x * speed;
+		guy.position.z -= fwd.z * speed;
+	}
+	if (pressedKeys[83] !== undefined) {
+		var fwd = getForwardDirection(guy);
+		guy.position.x += fwd.x * speed;
+		guy.position.z += fwd.z * speed;
+	}
+	if (pressedKeys[68] !== undefined) {
+		var right = getRightDirection(guy);
+		guy.position.x -= right.x * speed;
+		guy.position.z -= right.z * speed;
+	}
+	if (pressedKeys[65] !== undefined) {
+		var right = getRightDirection(guy);
+		guy.position.x += right.x * speed;
+		guy.position.z += right.z * speed;
+	}
+	if (pressedKeys[37] !== undefined) {
+		rotateAroundWorldAxis(guy, constants.YAXIS, rspeed);
+	}
+	if (pressedKeys[39] !== undefined) {
+		rotateAroundWorldAxis(guy, constants.YAXIS, -rspeed);
+	}
+}
+
+</script>
+
+</body>
+</html>

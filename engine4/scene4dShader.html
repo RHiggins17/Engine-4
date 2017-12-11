@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+
+<!-- HTML HEAD ELEMENT - DEFINES CSS FOR THE PAGE -->
+<head>
+	<meta charset="utf-8">
+    <style>
+	    body { background-color: #002200; }
+	    h3,p { color: #FFFF00; }
+	    canvas { background-color: #000044; }
+	    #debugContainer { color: #FFFFFF; position: absolute; z-index: 100;}
+    </style>
+    <title>Game Engine Scene Test</title>
+</head>
+
+<!-- ==================================================================== -->
+
+<!-- HTML BODY TAG - DEFINES THE HTML LAYOUT FOR THE PAGE -->
+<body oncontextmenu="return false;">
+
+<!-- INCLUDE SCRIPTS -->
+<script src="../threejs/build/three.js"></script>
+<script src="gameEngine4.js"></script>
+
+<!-- POST PROCESSING SCRIPTS -->
+<script src="../threejs/examples/js/shaders/CopyShader.js"></script>
+<script src="../threejs/examples/js/shaders/FilmShader.js"></script> 
+<script src="../threejs/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="../threejs/examples/js/postprocessing/RenderPass.js"></script>
+<script src="../threejs/examples/js/postprocessing/FilmPass.js"></script>
+<script src="../threejs/examples/js/postprocessing/ShaderPass.js"></script>
+
+<!-- GAME SPECIFIC INCLUDES -->
+<script src="scene4dShaderData.js"></script>
+
+<!-- DEFINE LEFT DIV TAG - FOR DEBUG PRINTOUTS -->
+<div id="debugContainer">
+<pre id="debug"></pre>
+</div>
+
+<!-- MAKE CANVAS AND OTHER STARTING ELEMENTS  -->
+<center>
+	<br/>
+	<canvas id="gameCanvas" width="800" height="600"></canvas><br/>
+	<button type="button" onclick="onButtonClick();">toggle shader</button>
+</center>
+
+
+<script>
+//----------------------------------------------------------------------//
+// THE MAIN CODE FOR THE GAME
+//----------------------------------------------------------------------//
+
+window.onload = function()
+{
+	// Initialize the engine
+	engine.DEBUG = false;
+	var canvas = document.getElementById("gameCanvas");
+	initEngine(canvas);
+
+	// Parse level0 (into a Three.js scene) and star the game loop
+	parseScene(level0); // upfront loaded Javscript object
+	createRenderer();
+
+	startGameLoop();
+}
+
+//----------------------------------------------------------------------//
+// SCRIPTS
+//----------------------------------------------------------------------//
+
+var onButtonClick = function()
+{
+	//debug("onButtonClick()");
+
+	var defaultRenderer = engine.renderers["defaultRenderer"];
+	var shaderRenderer = engine.renderers["shaderRenderer"];
+
+	if (gameState.renderer == defaultRenderer) {
+		gameState.renderer = shaderRenderer;
+	}
+	else {
+		gameState.renderer = defaultRenderer;
+	}
+}
+
+var createRenderer = function()
+{
+	var defaultRenderer = engine.renderers["defaultRenderer"];
+	var composer = new THREE.EffectComposer(defaultRenderer);
+
+    var renderPass = new THREE.RenderPass(gameState.scene, gameState.camera);    
+    var shaderPass = new THREE.ShaderPass( colorShader );
+    shaderPass.renderToScreen = true;
+
+    composer.addPass(renderPass);
+    composer.addPass(shaderPass); 
+
+    engine.renderers["shaderRenderer"] = composer;
+    gameState.renderer = composer;
+}
+
+var fnum = 0;
+
+function rotateScript(sceneNode)
+{
+    // Constants
+    fnum++;
+    var rotationSpeed = sceneNode.userData["rotationSpeed"] || 1.0;
+    var frameRate = 60.0;
+    var rs = 1.0; 
+    sceneNode.rotateOnAxis(constants.YAXIS, rs*rotationSpeed/frameRate);
+}
+
+function uniformsScript(sceneNode)
+{
+	var pass = engine.renderers["shaderRenderer"].passes[1];
+	var uniforms = pass.uniforms;
+	var color = uniforms.color.value;
+
+	color.x = Math.sin(fnum*0.01) * Math.sin(fnum*0.01);
+	color.y = Math.sin(fnum*0.0061) * Math.sin(fnum*0.0061);
+	color.z = Math.sin(fnum*0.0037) * Math.sin(fnum*0.0037);
+
+	uniforms.color.needsUpdate = true;
+
+	uniforms.time.value += 0.01;
+	uniforms.time.needsUpdate = true;
+}
+
+//----------------------------------------------------------------------//
+// SHADERS
+//----------------------------------------------------------------------//
+
+var colorShader = 
+{
+
+// THE UNIFORMS
+uniforms: 
+{
+	"tDiffuse": { type: "t", value: null },
+	"color": { type: "v3", value: new THREE.Vector3( 0.0, 1.0, 0.0 ) },
+	"time": { type: "f", value: 0.5 }
+},
+
+// THE VERTEX SHADER
+vertexShader: 
+`
+varying vec2 vUv;
+
+void main() {
+	vUv = uv;
+	gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`,
+
+// THE FRAGMENT SHADER
+fragmentShader:
+` 
+uniform vec3 color;
+uniform sampler2D tDiffuse;
+uniform float time;
+
+varying vec2 vUv;
+
+void main() {
+
+	vec2 center = vec2(0.5,0.5); // center position
+	vec2 diff = center - vUv;    // vector from center
+	float dist = length(diff);   // distance from center
+
+	// make texture offset
+	float sint = sin(time*5.0 + dist*25.0) * 0.05 * (1.0 - 2.0*dist);
+	vec2 texLookup = vUv + (sint/(dist+0.01))*(diff);
+
+	// look up texture
+	vec4 c = texture2D( tDiffuse, texLookup );
+
+	// blend with undistorted value
+	//vec4 c2 = texture2D( tDiffuse, vUv );
+	//c = 0.5 * (c + c2);
+
+	//c *= vec4(color, 1.0); // color shader
+	//c = vec4(1.0,1.0,1.0,1.0) - c; // negative shader
+
+	c.a = 1.0; // make fragment opaque
+	gl_FragColor = c;
+}
+`
+
+};
+
+</script>
+
+</body>
+</html>

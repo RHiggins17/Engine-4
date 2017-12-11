@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+
+<!-- HTML HEAD ELEMENT - DEFINES CSS FOR THE PAGE -->
+<head>
+	<meta charset="utf-8">
+    <style>
+	    body { background-color: #002200; }
+	    h3,p { color: #FFFF00; }
+	    canvas { background-color: #000044; }
+	    #debugContainer { color: #FFFFFF; position: absolute; z-index: 100;}
+    </style>
+    <title>Game Engine Scene Test</title>
+</head>
+
+<!-- ==================================================================== -->
+
+<!-- HTML BODY TAG - DEFINES THE HTML LAYOUT FOR THE PAGE -->
+<body oncontextmenu="return false;">
+
+<!-- INCLUDE SCRIPTS -->
+<script src="../threejs/build/three.js"></script>
+<script src="gameEngine4.js"></script>
+
+<!-- POST PROCESSING SCRIPTS -->
+<script src="../threejs/examples/js/shaders/CopyShader.js"></script>
+<script src="../threejs/examples/js/shaders/FilmShader.js"></script> 
+<script src="../threejs/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="../threejs/examples/js/postprocessing/RenderPass.js"></script>
+<script src="../threejs/examples/js/postprocessing/FilmPass.js"></script>
+<script src="../threejs/examples/js/postprocessing/ShaderPass.js"></script>
+
+<!-- GAME SPECIFIC INCLUDES -->
+<script src="scene4gShaderData.js"></script>
+
+<!-- DEFINE LEFT DIV TAG - FOR DEBUG PRINTOUTS -->
+<div id="debugContainer">
+<pre id="debug"></pre>
+</div>
+
+<!-- MAKE CANVAS AND OTHER STARTING ELEMENTS  -->
+<center>
+	<br/>
+	<canvas id="gameCanvas" width="800" height="600"></canvas><br/>
+	<button type="button" onclick="onButtonClick();">toggle shader</button>
+</center>
+
+
+<script>
+//----------------------------------------------------------------------//
+// THE MAIN CODE FOR THE GAME
+//----------------------------------------------------------------------//
+
+window.onload = function()
+{
+	// Initialize the engine
+	engine.DEBUG = false;
+	var canvas = document.getElementById("gameCanvas");
+	initEngine(canvas);
+
+	// Parse level0 (into a Three.js scene) and star the game loop
+	parseScene(level0); // upfront loaded Javscript object
+	createRenderer();
+	onButtonClick();
+
+	startGameLoop();
+}
+
+//----------------------------------------------------------------------//
+// SCRIPTS
+//----------------------------------------------------------------------//
+
+var onButtonClick = function()
+{
+	//debug("onButtonClick()");
+
+	var defaultRenderer = engine.renderers["defaultRenderer"];
+	var filmPassRenderer = engine.renderers["filmPassRenderer"];
+
+	if (gameState.renderer == defaultRenderer) {
+		gameState.renderer = filmPassRenderer;
+	}
+	else {
+		gameState.renderer = defaultRenderer;
+	}
+}
+
+var createRenderer = function()
+{
+	var defaultRenderer = engine.renderers["defaultRenderer"];
+	var composer = new THREE.EffectComposer(defaultRenderer);
+
+    var renderPass = new THREE.RenderPass(gameState.scene, gameState.camera);    
+    var filmPass = new THREE.FilmPass(1.5, 0.325, 512, false);
+    filmPass.renderToScreen = true;
+
+    composer.addPass(renderPass);
+    composer.addPass(filmPass); 
+
+    engine.renderers["filmPassRenderer"] = composer;
+    gameState.renderer = composer;
+}
+
+var fnum = 0;
+
+function rotateScript(sceneNode)
+{
+    // Constants
+    fnum++;
+    var rotationSpeed = sceneNode.userData["rotationSpeed"] || 1.0;
+    var frameRate = 60.0;
+    var rs = 1.0; 
+    sceneNode.rotateOnAxis(constants.YAXIS, rs*rotationSpeed/frameRate);
+
+    sceneNode.material.uniforms.fnum = {
+	    value: fnum,
+	    type: "f"
+	};
+}
+
+//---------------------------------------------------------
+// VERTEX SHADER
+
+var pvShader = `
+#define PHONG
+
+// CUSTOM UNIFORM
+uniform float fnum;
+
+varying vec3 vViewPosition;
+
+#ifndef FLAT_SHADED
+
+	varying vec3 vNormal;
+
+#endif
+
+#include <common>
+#include <uv_pars_vertex>
+#include <uv2_pars_vertex>
+#include <displacementmap_pars_vertex>
+#include <envmap_pars_vertex>
+#include <color_pars_vertex>
+#include <morphtarget_pars_vertex>
+#include <skinning_pars_vertex>
+#include <shadowmap_pars_vertex>
+#include <logdepthbuf_pars_vertex>
+#include <clipping_planes_pars_vertex>
+
+void main() {
+
+	#include <uv_vertex>
+	#include <uv2_vertex>
+	#include <color_vertex>
+
+	#include <beginnormal_vertex>
+	#include <morphnormal_vertex>
+	#include <skinbase_vertex>
+	#include <skinnormal_vertex>
+	#include <defaultnormal_vertex>
+
+#ifndef FLAT_SHADED // Normal computed with derivatives when FLAT_SHADED
+
+	vNormal = normalize( transformedNormal );
+
+#endif
+
+	#include <begin_vertex>
+	#include <displacementmap_vertex>
+	#include <morphtarget_vertex>
+	#include <skinning_vertex>
+
+
+	#include <project_vertex>
+
+	// CUSTOM PART OF SHADER
+	/*
+    float warp = 0.5 * sin(gl_Position.y*1.0 + fnum*0.3) 
+    				* sin(fnum*0.01) * sin(fnum*0.01);
+    gl_Position.x += warp; //abs(sin(warp + offset));
+    gl_Position.y += 0.0; //abs(sin(warp + offset));
+    gl_Position.z += 0.0; //abs(sin(warp + offset));
+    */
+    // END CUSTOM PART OF SHADER
+
+	#include <logdepthbuf_vertex>
+	#include <clipping_planes_vertex>
+
+	vViewPosition = - mvPosition.xyz;
+
+	#include <worldpos_vertex>
+	#include <envmap_vertex>
+	#include <shadowmap_vertex>
+
+}
+`;
+
+//---------------------------------------------------------
+// FRAGMENT SHADER
+
+var pfShader = `
+#define PHONG
+
+uniform vec3 diffuse;
+uniform vec3 emissive;
+uniform vec3 specular;
+uniform float shininess;
+uniform float opacity;
+
+#include <common>
+#include <packing>
+#include <color_pars_fragment>
+#include <uv_pars_fragment>
+#include <uv2_pars_fragment>
+#include <map_pars_fragment>
+#include <alphamap_pars_fragment>
+#include <aomap_pars_fragment>
+#include <lightmap_pars_fragment>
+#include <emissivemap_pars_fragment>
+#include <envmap_pars_fragment>
+#include <fog_pars_fragment>
+#include <bsdfs>
+#include <lights_pars>
+#include <lights_phong_pars_fragment>
+#include <shadowmap_pars_fragment>
+#include <bumpmap_pars_fragment>
+#include <normalmap_pars_fragment>
+#include <specularmap_pars_fragment>
+#include <logdepthbuf_pars_fragment>
+#include <clipping_planes_pars_fragment>
+
+void main() {
+
+	#include <clipping_planes_fragment>
+
+	vec4 diffuseColor = vec4( diffuse, opacity );
+	ReflectedLight reflectedLight = ReflectedLight( vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ) );
+	vec3 totalEmissiveRadiance = emissive;
+
+	#include <logdepthbuf_fragment>
+	#include <map_fragment>
+	#include <color_fragment>
+	#include <alphamap_fragment>
+	#include <alphatest_fragment>
+	#include <specularmap_fragment>
+	#include <normal_flip>
+	#include <normal_fragment>
+	#include <emissivemap_fragment>
+
+	// accumulation
+	#include <lights_phong_fragment>
+	#include <lights_template>
+
+	// modulation
+	#include <aomap_fragment>
+
+	/*
+	vec3 outgoingLight = reflectedLight.directDiffuse 
+		+ reflectedLight.indirectDiffuse 
+		+ reflectedLight.directSpecular 
+		+ reflectedLight.indirectSpecular 
+		+ totalEmissiveRadiance;
+	*/
+
+	// GENERAL PHONG PARAMS
+	vec3 V = vec3(0.0,0.0,1.0);
+	vec3 Ks = vec3(0.7,0.7,0.7);
+	vec3 N = normalize( normal ); // + 0.1*(diffuseColor.rgb-vec3(0.5,0.5,0.5)) );
+	vec3 Kd = diffuseColor.rgb; //vec3(1.0,1.0,1.0); //
+
+	float uu = vUv.x;
+	float vv = vUv.y;
+	//float exponent = 50.0 + mod((floor(uu*20.0) + floor(vv*20.0)), 2.0) * 300.0;
+	//exponent = 400.0;
+
+	float blue = max(0.0, Kd.b - 0.5*(Kd.r+Kd.g));
+	float exponent = blue * 800.0 + 50.0;
+	Ks *= 2.5 * blue;
+
+	// AMBIENT LIGHT VALUE
+	vec3 Ia = vec3(1,1,1); // ambient light color
+	vec3 ambientLightVal = Kd * Ia;
+
+	// KEY LIGHT VALUE
+	vec3 Li = normalize(vec3(1,1,1.0));
+	vec3 Ii = vec3(1.0,1.0,1.0);
+	vec3 H = normalize(Li + V);
+	//
+	vec3 keyLightVal = 
+		// diffuse term
+		Kd * Ii * 
+		max(0.0, dot(Li, N) ) + 
+		// specular term
+		Ks * Ii *
+		pow(max(0.0,dot(H,N)), exponent);
+		//smoothstep(0.998, 0.9992, dot(H,N));
+
+	// TOON SHADER VERSION OF KEY LIGHT
+	/*
+	vec3 keyLightVal = 
+		// diffuse term
+		Kd * Ii * 
+		0.5 * (smoothstep(0.2, 0.21, dot(Li,N)) + smoothstep(0.3, 0.32, dot(Li,N))) +
+		// specular term
+		Ks * Ii *
+		smoothstep(0.999, 0.9992, dot(H,N));
+	*/
+
+	// FILL LIGHT VALUE
+	Li = normalize(vec3(-1,-0.2,0.3));
+	Ii = vec3(1,0.5,0.5);
+	H = normalize(Li + V);
+	//
+	vec3 fillLightVal = 
+		// diffuse term
+		Kd * Ii * 
+		max(0.0, dot(Li, N) ); /* + 
+		// specular term
+		Ks * Ii *
+		pow(max(0.0,dot(H,N)), exponent);*/
+
+	//HEAD LIGHT VALUE
+	Ii = vec3(1,1,1);
+	float headDot = dot(V,N);
+	vec3 headLightVal =
+		Kd * Ii * headDot;
+
+	// RIM LIGHT VALUE
+	Ii = vec3(0.5,0.5,1.0);
+	float rimDot = 1.0 - dot(V,N);
+	vec3 rimLightVal =
+		(0.5*Kd + vec3(1,1,1)) * Ii * pow(rimDot,3.5);
+
+	//HEMISPHERE LIGHT VALUE
+	Li = vec3(0,1,0);
+	Ii = vec3(1,1,1);
+	float hemiDot = 0.5 * (1.0 + dot(Li,N));
+	vec3 hemiLightVal =
+		Kd * Ii * hemiDot;
+
+	// FINAL COLOR
+	vec3 outgoingLight = 
+		0.0 * ambientLightVal +
+		1.0 * keyLightVal +
+		0.0 * fillLightVal +
+		0.0 * headLightVal +
+		2.0 * rimLightVal + 
+		0.0 * hemiLightVal
+		;
+
+	#include <envmap_fragment>
+
+	gl_FragColor = vec4( outgoingLight, diffuseColor.a );
+
+	#include <premultiplied_alpha_fragment>
+	#include <tonemapping_fragment>
+	#include <encodings_fragment>
+	#include <fog_fragment>
+
+}
+`;
+
+
+</script>
+
+</body>
+</html>

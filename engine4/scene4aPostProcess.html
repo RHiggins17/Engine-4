@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+
+<!-- HTML HEAD ELEMENT - DEFINES CSS FOR THE PAGE -->
+<head>
+	<meta charset="utf-8">
+    <style>
+	    body { background-color: #002200; }
+	    h3,p { color: #FFFF00; }
+	    canvas { background-color: #000044; }
+	    #debugContainer { color: #FFFFFF; position: absolute; z-index: 100;}
+    </style>
+    <title>Game Engine Scene Test</title>
+</head>
+
+<!-- ==================================================================== -->
+
+<!-- HTML BODY TAG - DEFINES THE HTML LAYOUT FOR THE PAGE -->
+<body oncontextmenu="return false;">
+
+<!-- INCLUDE SCRIPTS -->
+<script src="../threejs/build/three.js"></script>
+<script src="gameEngine4.js"></script>
+
+<!-- POST PROCESSING SCRIPTS -->
+<script src="../threejs/examples/js/shaders/CopyShader.js"></script>
+<script src="../threejs/examples/js/shaders/FilmShader.js"></script> 
+<script src="../threejs/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="../threejs/examples/js/postprocessing/RenderPass.js"></script>
+<script src="../threejs/examples/js/postprocessing/FilmPass.js"></script>
+<script src="../threejs/examples/js/postprocessing/ShaderPass.js"></script>
+
+<!-- GAME SPECIFIC INCLUDES -->
+<script src="scene4aPostProcessData.js"></script>
+
+<!-- DEFINE LEFT DIV TAG - FOR DEBUG PRINTOUTS -->
+<div id="debugContainer">
+<pre id="debug"></pre>
+</div>
+
+<!-- MAKE CANVAS AND OTHER STARTING ELEMENTS  -->
+<center>
+	<br/>
+	<canvas id="gameCanvas" width="800" height="600"></canvas><br/>
+	<button type="button" onclick="onButtonClick();">toggle shader</button>
+</center>
+
+
+<script>
+//----------------------------------------------------------------------//
+// THE MAIN CODE FOR THE GAME
+//----------------------------------------------------------------------//
+
+window.onload = function()
+{
+	// Initialize the engine
+	engine.DEBUG = false;
+	var canvas = document.getElementById("gameCanvas");
+	initEngine(canvas);
+
+	// Parse level0 (into a Three.js scene) and star the game loop
+	parseScene(level0); // upfront loaded Javscript object
+	createRenderer();
+
+	startGameLoop();
+}
+
+//----------------------------------------------------------------------//
+// SCRIPTS
+//----------------------------------------------------------------------//
+
+var onButtonClick = function()
+{
+	//debug("onButtonClick()");
+
+	var defaultRenderer = engine.renderers["defaultRenderer"];
+	var filmPassRenderer = engine.renderers["filmPassRenderer"];
+
+	if (gameState.renderer == defaultRenderer) {
+		gameState.renderer = filmPassRenderer;
+	}
+	else {
+		gameState.renderer = defaultRenderer;
+	}
+}
+
+var createRenderer = function()
+{
+	var defaultRenderer = engine.renderers["defaultRenderer"];
+	var composer = new THREE.EffectComposer(defaultRenderer);
+
+    var renderPass = new THREE.RenderPass(gameState.scene, gameState.camera);    
+    var filmPass = new THREE.FilmPass(1.5, 0.325, 512, false);
+    filmPass.renderToScreen = true;
+
+    composer.addPass(renderPass);
+    composer.addPass(filmPass); 
+
+    engine.renderers["filmPassRenderer"] = composer;
+    gameState.renderer = composer;
+}
+
+var fnum = 0;
+
+function rotateScript(sceneNode)
+{
+    // Constants
+    fnum++;
+    var rotationSpeed = sceneNode.userData["rotationSpeed"] || 1.0;
+    var frameRate = 60.0;
+    var rs = 1.0; 
+    sceneNode.rotateOnAxis(constants.YAXIS, rs*rotationSpeed/frameRate);
+}
+
+</script>
+
+</body>
+</html>

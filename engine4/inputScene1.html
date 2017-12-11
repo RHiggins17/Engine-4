@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+
+<!--
+Name: Rachel Higgins
+Class: CS 4183 Video Game Design
+Semester: Fall 2017
+Professor: David Cline
+Assignment: Sprint 3
+Goal: None.  Objects are available to manipulate.
+Credits:
+		N/A
+ -->
+
+<!-- HTML HEAD ELEMENT - DEFINES CSS FOR THE PAGE -->
+<head>
+	<meta charset="utf-8">
+    <style>
+	    body { background-color: #002200; }
+	    h3,p { color: #FFFF00; }
+	    canvas { background-color: #000044; }
+	    #debugContainer { color: #FFFFFF; position: absolute; z-index: 100;}
+    </style>
+    <title>3D Text</title>
+</head>
+
+<!-- ==================================================================== -->
+
+<!-- HTML BODY TAG - DEFINES THE HTML LAYOUT FOR THE PAGE -->
+<body oncontextmenu="return false;">
+
+<!-- INCLUDE SCRIPTS -->
+<script src="../threejs/build/three.js"></script>
+<script src="../threejs/examples/js/loaders/OBJLoader.js"></script>
+<script src="gameEngine4.js"></script>
+
+<!-- POST PROCESSING SCRIPTS -->
+<script src="../threejs/examples/js/shaders/CopyShader.js"></script>
+<script src="../threejs/examples/js/shaders/FilmShader.js"></script> 
+<script src="../threejs/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="../threejs/examples/js/postprocessing/RenderPass.js"></script>
+<script src="../threejs/examples/js/postprocessing/FilmPass.js"></script>
+<script src="../threejs/examples/js/postprocessing/ShaderPass.js"></script>
+
+<!-- GAME SPECIFIC INCLUDES -->
+<script src="inputScene1Data.js"></script>
+
+<!-- DEFINE LEFT DIV TAG - FOR DEBUG PRINTOUTS -->
+<div id="debugContainer">
+<pre id="debug"></pre>
+</div>
+
+<!-- MAKE CANVAS AND OTHER STARTING ELEMENTS  -->
+<center>
+	<br/>
+	<canvas id="canvas" width="800" height="600"></canvas>
+	<h3 id="instructions">You can toggle which effect, if any, you want.  If you have no effect, it also allows you to zoom in with a second camera.</h3>
+	<button type="button1" onclick="onButtonClick1();">toggle shader1</button>
+	<button type="button2" onclick="onButtonClick2();">toggle shader2</button>
+	<button type="button" onclick="switchCamera('camera1');">Camera 1</button>
+	<button type="button" onclick="switchCamera('camera2');">Camera 2</button>
+</center>
+
+
+<script>
+//----------------------------------------------------------------------//
+// THE MAIN VARIABLES AND CODE FOR THE SCENE
+//----------------------------------------------------------------------//
+	//Keep count of number of times objects are selected randomly.
+	//Used to decide when object's size should be changed.
+	var fnum = 0;
+	//Holds the last object selected randomly for scaling.
+	var object;
+	//Each variable holds the object named for scale or position changes.
+	var sphere1;
+	var sphere2;
+	var cameraSound;
+	var camera1;
+	var camera2;
+	var robot;
+	var shot;
+	
+	//Run when window loads and gets the scene objects for later use.
+	window.onload = function()
+	{
+			// Start engine in full screen mode (really just full browswer)
+			engine.DEBUG = false;
+			//Sets the canvas and controls for the game and starts music.
+			canvas = document.getElementById("canvas");
+			initEngine(canvas);
+			// Parse the scene and start the game loop
+			parseScene(objects);
+			//Stores the scene and its objects in variables for use in the function below.
+			var scene = gameState.scene;
+			sphere1 = scene.getObjectByName("globe1", true);
+			sphere2 = scene.getObjectByName("globe2", true);
+			camera1 = scene.getObjectByName("camera1", true);
+			camera2 = scene.getObjectByName("camera2", true);
+			robot = scene.getObjectByName("osuBot", true);
+			cameraSound = gameState.camera;
+			var audio = new THREE.AudioListener();
+			cameraSound.add(audio);
+			var s = new THREE.PositionalAudio(audio);
+			var loadSound = new THREE.AudioLoader();
+			loadSound.load('youWereTheOne.mp3', function(buffer)
+			{
+				s.setBuffer(buffer);
+				//s.setLoop(1);
+				//s.setVolume(12);
+				s.setLoop(4);
+				s.setRolloffFactor(4);
+				s.play();
+			});
+			
+			sphere1.add(s);
+			
+			oldRenderer();
+			quirkyRenderer();
+			//Starts animation.
+			startGameLoop();
+	}
+	
+//----------------------------------------------------------------------//
+// EVENT HANDLERS
+//----------------------------------------------------------------------//
+
+//----------------------------------------------------------------------//
+// GLOBE MANIPULATORS
+//----------------------------------------------------------------------//	
+	
+	function rotateScript(sceneNode)
+	{
+		// Constants
+		fnum++;
+		var rotationSpeed = sceneNode.userData["rotationSpeed"] || 1.0;
+		var frameRate = 60.0;
+		var rs = 1.0
+		sceneNode.rotateOnAxis(constants.YAXIS, rs*rotationSpeed/frameRate);
+	}
+
+	function particleScript(sceneNode)
+	{
+		var speed = 0.1;
+		var child = sceneNode.children;
+
+		if (child.length < 400) {
+			var p = child[0];
+			var q = p.clone();
+			child.push(q);
+
+			// set random location and velocity
+			q.userData.life = Math.random() * 200;
+
+			q.position.x = sphere1.position.x;
+			q.position.y = sphere1.position.y;
+			q.position.z = sphere1.position.z;
+
+			q.userData.vx = speed * (Math.random() + Math.random() - 1.0);
+			q.userData.vy = speed * (Math.random() + Math.random() - 1.0);
+			q.userData.vz = speed * (Math.random() + Math.random() - 1.0);
+
+			q.material = p.material.clone();
+
+		}
+
+		for (var i=0; i<child.length; i++) 
+		{
+			var q = child[i];
+			q.position.x += q.userData.vx;
+			q.position.y += q.userData.vy;
+			q.position.z += q.userData.vz;
+
+			q.userData.vx *= 0.99;
+			q.userData.vy *= 0.99;
+			q.userData.vz *= 0.99;
+
+			q.userData.life--;
+			if (q.userData.life <= 0) {
+				q.userData.life = Math.random() * 100;
+				//q.position.x = globe.position.x + Math.random() - 0.5;
+				//q.position.y = globe.position.y + Math.random() - 0.5;
+				//q.position.z = globe.position.z + Math.random() - 0.5;
+				q.material.color.g = q.userData.life * 0.01;
+			}
+		}
+		
+		if (child.length < 400) {
+			var p = child[0];
+			var q = p.clone();
+			child.push(q);
+
+			// set random location and velocity
+			q.userData.life = Math.random() * 200;
+
+			q.position.x = sphere2.position.x;
+			q.position.y = sphere2.position.y;
+			q.position.z = sphere2.position.z;
+
+			q.userData.vx = speed * (Math.random() + Math.random() - 1.0);
+			q.userData.vy = speed * (Math.random() + Math.random() - 1.0);
+			q.userData.vz = speed * (Math.random() + Math.random() - 1.0);
+
+			q.material = p.material.clone();
+
+		}
+
+		for (var i=0; i<child.length; i++) 
+		{
+			var q = child[i];
+			q.position.x += q.userData.vx;
+			q.position.y += q.userData.vy;
+			q.position.z += q.userData.vz;
+
+			q.userData.vx *= 0.99;
+			q.userData.vy *= 0.99;
+			q.userData.vz *= 0.99;
+
+			q.userData.life--;
+			if (q.userData.life <= 0) {
+				q.userData.life = Math.random() * 100;
+				//q.position.x = globe.position.x + Math.random() - 0.5;
+				//q.position.y = globe.position.y + Math.random() - 0.5;
+				//q.position.z = globe.position.z + Math.random() - 0.5;
+				q.material.color.g = q.userData.life * 0.01;
+			}
+		}
+	}
+	
+	var onButtonClick1 = function()
+	{
+		//debug("onButtonClick()");
+
+		var defaultRenderer = engine.renderers["defaultRenderer"];
+		var shaderRenderer = engine.renderers["shaderRenderer"];
+		var filmPassRenderer = engine.renderers["filmPassRenderer"];
+
+		if ((gameState.renderer == defaultRenderer) || 
+		    (gameState.renderer == filmPassRenderer))
+		{
+			gameState.renderer = shaderRenderer;
+		}
+		else 
+		{
+			gameState.renderer = defaultRenderer;
+		}
+	}
+	
+	var onButtonClick2 = function()
+	{
+		//debug("onButtonClick()");
+
+		var defaultRenderer = engine.renderers["defaultRenderer"];
+		var filmPassRenderer = engine.renderers["filmPassRenderer"];
+		var shaderRenderer = engine.renderers["shaderRenderer"];
+
+		if ((gameState.renderer == defaultRenderer) || 
+		    (gameState.renderer == shaderRenderer)) 
+		{
+			gameState.renderer = filmPassRenderer;
+		}
+		else 
+		{
+			gameState.renderer = defaultRenderer;
+		}
+	}
+	
+	var switchCamera = function(cname)
+	{
+		debug("switch camera: " + cname);
+		var camera = gameState.scene.getObjectByName(cname);
+		if (camera !== undefined) {
+			gameState.camera = camera;
+		}
+	}
+
+	var quirkyRenderer = function()
+	{
+		var defaultRenderer = engine.renderers["defaultRenderer"];
+		var composer = new THREE.EffectComposer(defaultRenderer);
+
+		var renderPass = new THREE.RenderPass(gameState.scene, gameState.camera);    
+		var shaderPass = new THREE.ShaderPass( colorShader );
+		shaderPass.renderToScreen = true;
+
+
+		composer.addPass(renderPass);
+		composer.addPass(shaderPass);  
+		
+		engine.renderers["shaderRenderer"] = composer;
+		gameState.renderer = composer;
+	}
+	
+	var oldRenderer = function()
+	{
+		var defaultRenderer = engine.renderers["defaultRenderer"];
+		var composer2 = new THREE.EffectComposer(defaultRenderer);
+
+		var renderPass = new THREE.RenderPass(gameState.scene, gameState.camera);    
+		var filmPass = new THREE.FilmPass(1.5, 0.325, 512, false);
+		filmPass.renderToScreen = true;
+
+
+		composer2.addPass(renderPass);
+		composer2.addPass(filmPass);  
+
+		engine.renderers["filmPassRenderer"] = composer2;
+		gameState.renderer = composer2;
+	}
+	
+	function uniformsScript(sceneNode)
+	{
+		var pass = engine.renderers["shaderRenderer"].passes[1];
+		var uniforms = pass.uniforms;
+		var color = uniforms.color.value;
+
+		color.x = Math.sin(fnum*0.01) * Math.sin(fnum*0.01);
+		color.y = Math.sin(fnum*0.0061) * Math.sin(fnum*0.0061);
+		color.z = Math.sin(fnum*0.0037) * Math.sin(fnum*0.0037);
+
+		uniforms.color.needsUpdate = true;
+
+		uniforms.time.value += 0.01;
+		uniforms.time.needsUpdate = true;
+	}
+	
+//----------------------------------------------------------------------//
+// SHADERS
+//----------------------------------------------------------------------//
+
+	var colorShader = 
+	{
+
+	// THE UNIFORMS
+	uniforms: 
+	{
+		"tDiffuse": { type: "t", value: null },
+		"color": { type: "v3", value: new THREE.Vector3( 0.0, 1.0, 0.0 ) },
+		"time": { type: "f", value: 0.5 }
+	},
+
+	// THE VERTEX SHADER
+	vertexShader: 
+	`
+	varying vec2 vUv;
+
+	void main() {
+		vUv = uv;
+		gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+	}
+	`,
+
+	// THE FRAGMENT SHADER
+	fragmentShader:
+	` 
+	uniform vec3 color;
+	uniform sampler2D tDiffuse;
+	uniform float time;
+
+	varying vec2 vUv;
+
+	void main() {
+
+		vec2 center = vec2(0.5,0.5); // center position
+		vec2 diff = center - vUv;    // vector from center
+		float dist = length(diff);   // distance from center
+
+		// make texture offset
+		float sint = sin(time*5.0 + dist*25.0) * 0.05 * (1.0 - 2.0*dist);
+		vec2 texLookup = vUv + (sint/(dist+0.01))*(diff);
+
+		// look up texture
+		vec4 c = texture2D( tDiffuse, texLookup );
+
+		// blend with undistorted value
+		//vec4 c2 = texture2D( tDiffuse, vUv );
+		//c = 0.5 * (c + c2);
+
+		//c *= vec4(color, 1.0); // color shader
+		//c = vec4(1.0,1.0,1.0,1.0) - c; // negative shader
+
+		c.a = 1.0; // make fragment opaque
+		gl_FragColor = c;
+	}
+	`
+
+	};
+	
+</script>
+
+</body>
+</html>

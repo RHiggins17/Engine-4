@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+
+<!-- HTML HEAD ELEMENT - DEFINES CSS FOR THE PAGE -->
+<head>
+	<meta charset="utf-8">
+    <style>
+	    body { background-color: #002200; }
+	    h3,p { color: #FFFF00; }
+	    canvas { background-color: #000044; }
+	    #debugContainer { color: #FFFFFF; position: absolute; z-index: 100;}
+    </style>
+    <title>Game Engine Scene Test</title>
+</head>
+
+<!-- ==================================================================== -->
+
+<!-- HTML BODY TAG - DEFINES THE HTML LAYOUT FOR THE PAGE -->
+<body oncontextmenu="return false;">
+
+<!-- INCLUDE SCRIPTS -->
+<script src="../threejs/build/three.js"></script>
+<script src="gameEngine4.js"></script>
+
+<!-- GAME SPECIFIC INCLUDES -->
+<script src="scene4fGravityData.js"></script>
+
+<!-- DEFINE LEFT DIV TAG - FOR DEBUG PRINTOUTS -->
+<div id="debugContainer">
+<pre id="debug"></pre>
+</div>
+
+<!-- MAKE CANVAS AND OTHER STARTING ELEMENTS  -->
+<center>
+	<br/>
+	<canvas id="gameCanvas" width="800" height="600"></canvas><br/>
+	<button type="button" onclick="resetSimulation(0.1);">0.1</button>
+	<button type="button" onclick="resetSimulation(1.0);">1.0</button>
+	<button type="button" onclick="resetSimulation(10.0);">10.0</button>
+	<button type="button" onclick="resetSimulation(100.0);">100.0</button>
+	<button type="button" onclick="resetSimulation(1000.0);">1000.0</button>
+	<button type="button" onclick="resetSimulation(10000.0);">10000.0</button><br/>
+</center>
+
+
+<script>
+//----------------------------------------------------------------------//
+// THE MAIN CODE FOR THE GAME
+//----------------------------------------------------------------------//
+
+window.onload = function()
+{
+	// Initialize the engine
+	engine.DEBUG = false;
+	var canvas = document.getElementById("gameCanvas");
+	initEngine(canvas);
+
+	// Parse level0 (into a Three.js scene) and star the game loop
+	parseScene(level0); // upfront loaded Javscript object
+	//loadScene("scene0a.json"); // asynchronous loading of JSON
+	
+	gameState.soften = 0.1;
+	startGameLoop();
+}
+
+//----------------------------------------------------------------------//
+// SCRIPTS
+//----------------------------------------------------------------------//
+
+function resetSimulation(s)
+{
+	gameState.soften = s;
+
+	var sceneNode = gameState.scene.getObjectByName("gravitySimulation");
+	var children = sceneNode.children;
+
+	for (var i=0; i<30; i++)
+	{
+		for (var j=0; j<10; j++)
+		{
+			var p,q; 
+
+			if (children.length < (i*10+j)+1)
+			{
+				p = children[0];
+				q = p.clone();
+				
+				q.material = p.material.clone();
+				var color = q.material.color;
+				color.r = Math.random();
+				color.g = Math.random();
+				color.b = Math.random();
+				sceneNode.add(q);
+			}
+			else
+			{
+				q = children[i*10+j];
+			}
+
+			q.position.set(i,j,0);
+
+			q.userData.vx = 0;
+			q.userData.vy = 0;
+			q.userData.vz = 0;
+		}
+	}
+}
+
+function particleScript(sceneNode)
+{
+	//debug("particleScript");
+	
+	var G = 0.001;
+	var children = sceneNode.children;
+
+	if (children.length == 1) resetSimulation(0.1);
+	
+	for (var i=0; i<children.length; i++) {
+		var q = children[i];
+		q.position.x += q.userData.vx;
+		q.position.y += q.userData.vy;
+		q.position.z += q.userData.vz;
+	}
+
+	var d = new THREE.Vector3();
+
+	for (var i=0; i<children.length; i++) {
+		for (var j=i+1; j<children.length; j++) {
+			d.set(0,0,0);
+			d.add(children[i].position);
+			d.sub(children[j].position);
+			
+			var length = d.length();
+			var scale = G / (length*length*length + gameState.soften);
+
+			var ci = children[i];
+			var cj = children[j];
+
+			ci.userData.vx -= scale * d.x;
+			ci.userData.vy -= scale * d.y;
+			ci.userData.vz -= scale * d.z;
+
+			cj.userData.vx += scale * d.x;
+			cj.userData.vy += scale * d.y;
+			cj.userData.vz += scale * d.z;
+		}
+	}
+}
+
+</script>
+
+</body>
+</html>
